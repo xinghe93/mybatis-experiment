@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Data
 public class Enrollment {
 
-    private Integer id;
+    private Long id;
     private Integer studentId;
     private Integer courseId;
     private String semester;

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration
+        PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+    <properties resource="db.properties"/>
+
+    <settings>
+        <!-- 将 student_no、enrollment_date 等列映射到对应的驼峰属性。 -->
+        <setting name="mapUnderscoreToCamelCase" value="true"/>
+        <setting name="logImpl" value="LOG4J2"/>
+    </settings>
+
+    <typeAliases>
+        <!-- Mapper XML 中可以直接使用 Student、Course、Enrollment。 -->
+        <package name="com.xinghe.entity"/>
+    </typeAliases>
+
+    <environments default="development">
+        <environment id="development">
+            <!-- 由 SqlSession 显式提交或回滚 JDBC 事务。 -->
+            <transactionManager type="JDBC"/>
+            <dataSource type="POOLED">
+                <property name="driver" value="${db.driver}"/>
+                <property name="url" value="${db.url}"/>
+                <property name="username" value="${db.username}"/>
+                <property name="password" value="${db.password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+
+    <mappers>
+        <!-- 仅注册原生 Mapper，MyBatis-Plus Mapper 使用独立会话工厂。 -->
+        <package name="com.xinghe.mybatis.mapper"/>
+    </mappers>
+</configuration>
