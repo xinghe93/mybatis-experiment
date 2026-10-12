@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <!-- DEBUG 输出 SQL、参数及类型、结果数量；排查映射时改为 TRACE 查看每行结果。 -->
+        <Logger name="com.xinghe.mybatis.mapper" level="DEBUG"/>
+        <Logger name="com.xinghe.plus.mapper" level="DEBUG"/>
+
+        <!-- Mapper 日志继承这里的控制台输出，其他日志从 INFO 级别开始输出。 -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>
