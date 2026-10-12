@@ -5,10 +5,48 @@
 
 <mapper namespace="com.xinghe.mybatis.mapper.StudentMapper">
 
+    <insert id="insert"
+            parameterType="com.xinghe.entity.Student"
+            useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO student (student_no, name, gender, major, grade, enrollment_date)
+        VALUES (#{studentNo}, #{name}, #{gender}, #{major}, #{grade}, #{enrollmentDate})
+    </insert>
+
     <select id="selectById" resultType="Student">
         SELECT id, student_no, name, gender, major, grade, enrollment_date
         FROM student
         WHERE id = #{id}
     </select>
+
+    <update id="updateById">
+        UPDATE student
+        <set>
+            <if test="studentNo != null">
+                student_no = #{studentNo},
+            </if>
+            <if test="name != null">
+                name = #{name},
+            </if>
+            <if test="gender != null">
+                gender = #{gender},
+            </if>
+            <if test="major != null">
+                major = #{major},
+            </if>
+            <if test="grade != null">
+                grade = #{grade},
+            </if>
+            <if test="enrollmentDate != null">
+                enrollment_date = #{enrollmentDate},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM student
+        WHERE id = #{id}
+    </delete>
 
 </mapper>
