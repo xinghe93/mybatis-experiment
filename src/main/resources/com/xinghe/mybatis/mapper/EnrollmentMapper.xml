@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.xinghe.mybatis.mapper.EnrollmentMapper">
+
+    <insert id="insert"
+            parameterType="Enrollment"
+            useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO enrollment (student_id, course_id, semester, selected_at, score)
+        VALUES (#{studentId}, #{courseId}, #{semester}, #{selectedAt}, #{score})
+    </insert>
+
+</mapper>

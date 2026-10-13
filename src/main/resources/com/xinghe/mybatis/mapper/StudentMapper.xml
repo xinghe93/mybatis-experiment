@@ -6,7 +6,7 @@
 <mapper namespace="com.xinghe.mybatis.mapper.StudentMapper">
 
     <insert id="insert"
-            parameterType="com.xinghe.entity.Student"
+            parameterType="Student"
             useGeneratedKeys="true"
             keyProperty="id">
         INSERT INTO student (student_no, name, gender, major, grade, enrollment_date)
