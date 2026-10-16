@@ -1,6 +1,7 @@
 package com.xinghe.mybatis.mapper;
 
 import com.xinghe.entity.Student;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.exceptions.PersistenceException;
 
 import java.util.List;
@@ -23,12 +24,12 @@ public interface StudentMapper {
      */
     int deleteById(Integer id);
 
-    List<Student> selectByCondition();
+    List<Student> selectByCondition(Student student);
 
-    List<Student> selectByIds();
+    List<Student> selectByIds(List<Integer> ids);
 
     int countByCondition(Student student);
 
-
+    List<Student> selectPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
 
 }

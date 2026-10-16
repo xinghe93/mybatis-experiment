@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,10 +69,6 @@ public class StudentMapperTest {
         assertEquals(student, studentMapper.selectById(student.getId()));
     }
 
-    /**
-     * 验证按主键查询能够正确映射学生的全部字段，包括入学日期。
-     * 先插入临时学生，避免依赖实验数据中的固定编号。
-     */
     @Test
     void testSelectById() {
         Student expected = insertTestStudent();
@@ -80,6 +77,21 @@ public class StudentMapperTest {
 
         assertNotNull(actual);
         assertEquals(expected, actual);
+    }
+
+    @Test
+    void testUpdateById() {
+        Student student = insertTestStudent();
+
+        Student update = new Student();
+        update.setId(student.getId());
+        update.setName("更新后的姓名");
+        update.setMajor("软件工程");
+
+        assertEquals(1, studentMapper.updateById(update));
+
+        student.setName(update.getName());
+        student.setMajor(update.getMajor());
     }
 
     /**
@@ -144,6 +156,58 @@ public class StudentMapperTest {
         }
         System.out.println("【外键限制】删除被拒绝，错误码："
                 + cause.getErrorCode() + "，学生和选课记录仍存在");
+    }
+
+    // 按姓名查询
+    @Test
+    void testSelectByCondition() {
+        Student student = newTestStudent();
+        student.setName(uniqueTestNumber());
+        assertEquals(1, studentMapper.insert(student));
+
+        Student condition = new Student();
+        condition.setName(student.getName());
+        List<Student> students = studentMapper.selectByCondition(condition);
+
+        assertEquals(List.of(student), students);
+    }
+
+    // 根据多个 ID 查询
+    @Test
+    void testSelectByIds() {
+        Student first = insertTestStudent();
+        Student second = insertTestStudent();
+
+        List<Student> students = studentMapper.selectByIds(
+                List.of(first.getId(), second.getId()));
+
+        assertEquals(List.of(first, second), students);
+    }
+
+    // 统计指定专业的学生人数
+    @Test
+    void testCountByCondition() {
+        Student student = newTestStudent();
+        student.setMajor(uniqueTestNumber());
+        assertEquals(1, studentMapper.insert(student));
+
+        Student condition = new Student();
+        condition.setMajor(student.getMajor());
+        int count = studentMapper.countByCondition(condition);
+
+        assertEquals(1, count);
+    }
+
+    // 查询第一页，每页两条，按 ID 升序排列
+    @Test
+    void testSelectPage() {
+        insertTestStudent();
+        insertTestStudent();
+
+        List<Student> students = studentMapper.selectPage(0, 2);
+
+        assertEquals(2, students.size());
+        assertTrue(students.get(0).getId() < students.get(1).getId());
     }
 
     /**
@@ -211,4 +275,5 @@ public class StudentMapperTest {
         assertEquals(1, enrollmentMapper.insert(enrollment));
         assertNotNull(enrollment.getId(), "新增选课记录后应回填主键");
     }
+    
 }
