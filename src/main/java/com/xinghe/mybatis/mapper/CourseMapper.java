@@ -16,7 +16,7 @@ public interface CourseMapper {
      */
     @Insert("INSERT INTO course (course_no, name, credit, hours, teacher) VALUES (#{courseNo}, #{name}, #{credit}, #{hours}, #{teacher})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
-    void insert(Course course);
+    int insert(Course course);
 
     @Select("SELECT id, course_no, name, credit, hours, teacher FROM course WHERE id = #{id}")
     Course selectById(Integer id);
@@ -24,10 +24,32 @@ public interface CourseMapper {
     @Select("SELECT id, course_no, name, credit, hours, teacher FROM course")
     List<Course> selectAll();
 
-    @Update("")
-    void updateById(Course course);
+    @Update("""
+            <script>
+                UPDATE course
+                <set>
+                    <if test="courseNo != null">
+                        course_no = #{courseNo},
+                    </if>
+                    <if test="name != null">
+                        name = #{name},
+                    </if>
+                    <if test="credit != null">
+                        credit = #{credit},
+                    </if>
+                    <if test="hours != null">
+                        hours = #{hours},
+                    </if>
+                    <if test="teacher != null">
+                        teacher = #{teacher},
+                    </if>
+                </set>
+                WHERE id = #{id}
+            </script>
+            """)
+    int updateById(Course course);
 
-    @Delete("")
-    void deleteById(Integer id);
+    @Delete("DELETE FROM course WHERE id = #{id}")
+    int deleteById(Integer id);
 
 }
