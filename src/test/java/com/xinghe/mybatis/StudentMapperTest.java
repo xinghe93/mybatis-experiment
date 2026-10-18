@@ -25,7 +25,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
 public class StudentMapperTest {
 
     private SqlSession sqlSession;
@@ -275,5 +274,5 @@ public class StudentMapperTest {
         assertEquals(1, enrollmentMapper.insert(enrollment));
         assertNotNull(enrollment.getId(), "新增选课记录后应回填主键");
     }
-    
+
 }
