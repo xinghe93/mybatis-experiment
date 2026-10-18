@@ -1,209 +1,151 @@
-# MyBatis 课程实验计划
+# MyBatis 与 MyBatis-Plus Mapper 实验计划
 
-## 一、项目目标
+**目标：** 学生用于信息管理，课程用于查找课程，选课记录用于批量选课、成绩登记和记录查询。
 
-以“学生选课管理”为业务场景，通过 JUnit 演示 MyBatis 和 MyBatis-Plus 的 CRUD、动态 SQL、多条件筛选、分页、多对多关联映射与事务，结合 SQL 日志完成配置和映射问题排查。
+**范围：** 保持现有项目框架和三张表不变；原生代码放在 `com.xinghe.mybatis.mapper`，Plus 代码放在 `com.xinghe.plus.mapper`。本次仅实施原生 MyBatis Mapper、对应 XML / 注解和测试；Plus 实现暂不改动。
 
-采用普通 Maven 项目，使用 Docker 中的 MySQL 8（当前为 `mysql:8.4`，容器名 `mysql8`）、MyBatis、MyBatis-Plus、Log4j 2、JUnit 5 和 Lombok。Java 沿用当前 Maven 配置的25，不开发网页界面。Lombok 用于简化实体和 DTO 的访问方法，并在 Maven 中显式配置注解处理器。
+## 一、实验要求如何分配
 
-## 二、数据库设计
-
-| 表 | 字段 | 说明 |
+| 技术 | 实验要求 | 主要落点 |
 | --- | --- | --- |
-| `student` | `id`、`student_no`、`name`、`gender`、`major`、`grade`、`enrollment_date` | 学生编号、学号、姓名、性别、专业、入学年级、入学日期 |
-| `course` | `id`、`course_no`、`name`、`credit`、`hours`、`teacher` | 课程编号、课程代码、名称、学分、学时、授课教师 |
-| `enrollment` | `id`、`student_id`、`course_id`、`semester`、`selected_at`、`score` | 选课记录编号、学生编号、课程编号、学期、选课时间、成绩 |
+| MyBatis | 多条件模糊查询：`if / where` | StudentMapper：按姓名、专业、年级筛选学生 |
+| MyBatis | 动态更新：`set` | StudentMapper：只修改传入的学生信息 |
+| MyBatis | 批量插入：`foreach` | EnrollmentMapper：一次为学生添加多条选课记录 |
+| MyBatis | 批量删除：`foreach` | EnrollmentMapper：按选课记录 ID 批量删除 |
+| MyBatis | 分支选择：`choose / when / otherwise` | CourseMapper：优先按课程代码，其次名称、教师查找课程 |
+| MyBatis-Plus | 实体类注解映射 | Student、Course、Enrollment 三个共用实体 |
+| MyBatis-Plus | BaseMapper 零手写 SQL 的通用 CRUD | 三个 Mapper 均具备并验证基础增删改查 |
+| MyBatis-Plus | 条件构造器多条件查询 | CourseMapper：按名称、教师和学分筛选课程 |
+| MyBatis-Plus | 分页插件与分页查询 | EnrollmentMapper：按学生、学期分页查看选课记录 |
 
-- 学生与课程通过选课记录建立多对多关系；一名学生可以选择多门课程，一门课程可以有多名学生。
-- 学号和课程代码分别唯一；学生编号、课程编号与学期组合唯一，防止同一学期重复选课，不同学期允许重新选修。
-- `grade` 表示入学年份；学期统一使用 `2026-2027-1` 形式，末位为1或2。
-- 学分和成绩使用 `DECIMAL`，Java 对应 `BigDecimal`；成绩可为空，表示尚未评分，零分是有效成绩。
-- 学分范围为大于0且不超过10，学时为正数，成绩范围为0～100。
-- 主键采用自增策略；被选课记录引用的学生或课程禁止直接删除。
-- 为专业与年级、授课教师、学生与学期、课程与学期设置查询索引。
-- 准备30名学生、8门课程、60条选课记录，覆盖4个专业、2023～2026级及两个学期。保留10名未选课学生和1门无人选修课程。
+## 二、原生 MyBatis 的 Mapper 设计
 
-## 三、功能与技术分工
+每个接口都包含 `insert、selectById、updateById、deleteById`，扩展查询和批量操作按业务分配。
 
-| 实验内容 | 实现方式 |
-| --- | --- |
-| 学生新增、查询、修改、删除 | MyBatis Mapper 接口 + XML，验证新增后的主键回填 |
-| 课程新增、查询、修改、删除 | MyBatis 的 `@Insert`、`@Select`、`@Update`、`@Delete` 注解 |
-| 学生多条件筛选 | XML 按学号、姓名、专业、年级、入学日期范围组合查询 |
-| 动态 SQL | `<if>`、`<where>` 处理筛选；`<set>` 更新字段；`<foreach>` 处理编号集合；`<choose>` 选择预设排序 |
-| SQL 复用 | `<sql>`、`<include>` 复用查询字段和筛选条件 |
-| 原生分页 | 手写 `COUNT` 和 `LIMIT`，保证计数与列表使用相同条件及稳定排序 |
-| 关联映射 | `resultMap`、`association` 映射选课记录的学生与课程，`collection` 映射学生选课列表及课程选课学生列表 |
-| 选课记录查询 | 三表 JOIN 查询学生、课程、教师、学期和成绩，按专业、课程、学期、成绩范围及是否评分筛选并分页 |
-| 成绩与选课统计 | 按课程和学期统计人数、已评分人数、平均分，查询不及格学生；LEFT JOIN保留无人选修课程 |
-| MyBatis-Plus 通用 CRUD | 三张表分别提供继承 `BaseMapper` 的 Mapper |
-| MyBatis-Plus 条件与分页 | 使用 `LambdaQueryWrapper`、`Page` 和 `PaginationInnerInterceptor` |
-| 学生换课事务 | 删除旧选课记录，同时新增新课程的选课记录，两步一起提交或回滚 |
+### 1. StudentMapper：学生信息维护，共 5 个方法
 
-原生 Mapper 与 Plus Mapper 分包，分别注册到对应会话工厂。同一个方法不重复使用 XML 和 SQL 注解定义。关联查询为重复的 `id`、`name` 字段设置别名。选课列表分页先分页查询选课记录，再映射关联对象；学生分页带选课集合时先分页学生再加载集合，避免一对多 JOIN 导致人数或页大小错误。
+接口：`src/main/java/com/xinghe/mybatis/mapper/StudentMapper.java`。
 
-## 四、方法清单
+SQL：`src/main/resources/com/xinghe/mybatis/mapper/StudentMapper.xml`。
 
-以下为待实现的方法约定。学生 CRUD 使用 XML，课程 CRUD 使用 SQL 注解，选课、关联映射和统计查询使用 XML。三张表另外通过 MyBatis-Plus 演示通用操作。
+| 方法签名 | 功能 | 实现重点 |
+| --- | --- | --- |
+| `int insert(Student student)` | 新增学生 | 插入学生信息，回填自增主键 |
+| `Student selectById(Integer id)` | 查看学生信息 | 按主键查询，供信息展示和更新结果验证使用 |
+| `int updateById(Student student)` | 修改学生信息 | `set / if` 按需更新姓名、性别、专业、年级、入学日期，WHERE 固定按 id |
+| `int deleteById(Integer id)` | 删除学生 | 按主键删除；存在选课记录时由外键拒绝 |
+| `List<Student> selectByCondition(@Param("condition") Student condition)` | 筛选学生 | 姓名、专业模糊匹配；年级精确匹配；`if / where` 组合条件 |
 
-### 4.1 StudentMapper：学生管理（XML）
+组合查询示例：姓名包含“张”、专业包含“计算机”、年级为 2026，同时提供时三个条件按 AND 组合。空条件查询全部，列表按 id 升序。
 
-| 方法 | 用途与知识点 |
-| --- | --- |
-| `insert(student)` | 新增学生，回填自增主键 |
-| `selectById(id)` | 按学生编号查询 |
-| `updateById(student)` | 修改学生信息，使用 `<set>` 动态更新，拒绝没有待更新字段的请求 |
-| `deleteById(id)` | 删除学生，被选课记录引用时由外键拒绝 |
-| `selectByCondition(query)` | 按学号、姓名、专业、年级、入学日期筛选，使用 `<if>`、`<where>` |
-| `selectByIds(ids)` | 使用 `<foreach>` 查询多个学生，空集合返回空列表 |
-| `countByCondition(query)` | 统计符合筛选条件的学生数量 |
-| `selectPage(query, offset, pageSize)` | 使用 `LIMIT` 分页，使用 `<choose>` 选择预设排序，并以学生编号保证排序稳定 |
+更新时学号不参与修改，null 字段保持原值；调用前要求提供 id 和至少一个有效更新字段，避免生成空 SET。
 
-`query` 使用 `StudentQuery`，包含筛选条件和预设排序选项。列表、计数及分页查询使用 `<sql>`、`<include>` 复用相同筛选条件；分页参数独立传入，`offset = (pageNo - 1) * pageSize`。
+### 2. CourseMapper：课程维护与查找，共 5 个方法
 
-### 4.2 CourseMapper：课程管理（注解）
+接口与 SQL：`src/main/java/com/xinghe/mybatis/mapper/CourseMapper.java`，全部使用注解，不创建 XML。
 
-| 方法 | 用途与注解 |
-| --- | --- |
-| `insert(course)` | 新增课程，使用 `@Insert`、`@Options` 回填主键 |
-| `selectById(id)` | 按课程编号查询，使用 `@Select` |
-| `selectAll()` | 查询课程列表，使用 `@Select`，按课程编号排序 |
-| `updateById(course)` | 修改课程，使用 `@Update` |
-| `deleteById(id)` | 删除课程，使用 `@Delete`，被选课记录引用时由外键拒绝 |
+| 方法签名 | 功能 | 实现重点 |
+| --- | --- | --- |
+| `int insert(Course course)` | 添加课程 | `@Insert`；通过 `@Options` 回填自增主键 |
+| `Course selectById(Integer id)` | 查看课程信息 | `@Select`，按主键查询课程详情 |
+| `int updateById(Course course)` | 修改课程信息 | `@Update` 固定更新名称、学分、学时、教师，WHERE 按 id；调用前提供这四个字段，课程代码不变 |
+| `int deleteById(Integer id)` | 删除课程 | `@Delete` 按主键删除；存在选课记录时由外键拒绝 |
+| `List<Course> selectByPriority(@Param("condition") Course condition)` | 按优先条件查找课程 | `@Select` 的 `<script>` 中使用 `choose / when / otherwise` |
 
-课程 Mapper 重点展示注解 CRUD，不重复实现学生 Mapper 的整套动态查询。
+分支规则：
 
-### 4.3 EnrollmentMapper：选课与关联查询（XML）
+1. 提供课程代码：按 `courseNo` 精确查询。
+2. 否则提供课程名称：按 `name` 模糊查询。
+3. 否则提供教师：按 `teacher` 模糊查询。
+4. 否则：查询全部课程，按 id 升序。
 
-| 方法 | 用途与知识点 |
-| --- | --- |
-| `insert(enrollment)` | 新增选课记录，回填主键；唯一约束防止同学期重复选课 |
-| `selectById(id)` | 查询选课记录 |
-| `updateScore(id, score)` | 录入或修改成绩，合法范围为0～100 |
-| `deleteUnscored(id, studentId, semester)` | 删除指定学生、指定学期且尚未评分的选课记录 |
-| `selectByIdForUpdate(id)` | 使用 `FOR UPDATE` 锁定旧选课记录，供换课事务使用 |
-| `selectDetailById(id)` | 查询选课记录及学生、课程对象，通过 `association` 映射 |
-| `selectStudentWithEnrollments(studentId, semester)` | 查询学生及指定学期的选课集合，通过 `collection` 映射，无选课时返回空集合 |
-| `selectCourseWithStudents(courseId, semester)` | 查询课程及指定学期的选课学生集合，无人选修时返回空集合 |
-| `countByCondition(query)` | 按学生、专业、课程、学期、成绩范围及是否评分计数 |
-| `selectPage(query, offset, pageSize)` | 三表关联、多条件筛选与选课记录分页，计数和列表条件保持一致 |
-| `selectCourseStatistics(semester)` | 统计各课程在指定学期的选课人数、已评分人数和平均分，保留无人选修课程 |
+每次只选第一个有效分支，不叠加其他条件。高优先条件没有匹配结果时返回空列表，不继续尝试后面的分支。该接口用于演示“优先查找”；多条件课程筛选交给 Plus 的 Wrapper 演示。
 
-`query` 使用 `EnrollmentQuery`；“是否评分”采用可选条件，区分未筛选、已评分和未评分，不能把零分当作未评分。三表查询中的重复 `id`、`name` 使用别名。课程统计通过 LEFT JOIN 实现，学期条件放在 JOIN 条件中，避免过滤掉无人选修课程；`AVG` 忽略空成绩，没有已评分记录时平均分为空。
+### 3. EnrollmentMapper：选课记录与成绩，共 7 个方法
 
-### 4.4 EnrollmentService：业务与事务
+接口：`src/main/java/com/xinghe/mybatis/mapper/EnrollmentMapper.java`。
 
-| 方法 | 用途 |
-| --- | --- |
-| `enroll(studentId, courseId, semester)` | 校验学生、课程、学期和选课时间，新增尚未评分的选课记录 |
-| `withdraw(studentId, enrollmentId)` | 校验记录归属和成绩状态，只允许退选自己的未评分记录 |
-| `changeCourse(studentId, enrollmentId, newCourseId)` | 同一事务中删除旧记录并插入新记录，保持学期一致，失败时回滚 |
+SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 
-`changeCourse` 中的查询、锁定、删除与插入必须使用同一个 `SqlSession`，检查删除影响行数为1后再插入。方法负责显式提交或回滚，并关闭会话；测试通过插入冲突验证旧记录恢复。
+| 方法签名 | 功能 | 实现重点 |
+| --- | --- | --- |
+| `int insert(Enrollment enrollment)` | 单条选课 | 插入一条选课记录，回填自增主键 |
+| `Enrollment selectById(Long id)` | 查看选课记录 | 按主键查询 |
+| `int updateById(Enrollment enrollment)` | 修改选课记录或登记成绩 | `set / if` 按非 null 字段更新学期、选课时间、成绩，WHERE 按 id；不修改学生、课程 ID |
+| `int deleteById(Long id)` | 删除单条选课记录 | 按主键删除 |
+| `int insertBatch(@Param("list") List<Enrollment> list)` | 批量选课 | `foreach` 生成一条多行 VALUES 插入语句 |
+| `List<Enrollment> selectByStudentAndSemester(@Param("studentId") Integer studentId, @Param("semester") String semester)` | 查看某学生某学期的选课记录 | 学生 ID、学期均为必填，精确匹配，按 id 升序 |
+| `int deleteBatch(@Param("ids") List<Long> ids)` | 批量删除选课记录 | `foreach` 生成 `WHERE id IN (...)` |
 
-### 4.5 MyBatis-Plus：继承通用方法
+选课记录主键使用 `Long`，学生、课程外键使用 `Integer`。成绩登记直接复用 `updateById`，只传 id 和 score，不再增加独立的成绩更新方法。
 
-定义三个接口，不自己重写通用 CRUD 的 SQL：
+批量插入前准备好学生 ID、课程 ID、学期和选课时间，成绩可为 null。通过学生与学期查询确认新增记录，再获取主键进行成绩登记或批量删除，不要求批量主键回填。
 
-```java
-public interface StudentPlusMapper extends BaseMapper<Student> {}
-public interface CoursePlusMapper extends BaseMapper<Course> {}
-public interface EnrollmentPlusMapper extends BaseMapper<Enrollment> {}
-```
+`updateById` 要求 id 非 null、至少一个有效更新字段；传入成绩时必须在 0～100 之间，0 分有效，null 表示不修改。修改学期仍受组合唯一约束限制。本实验不增加清空成绩、换课等功能。批量删除定位管理指定的记录，不额外设计退课业务规则。
 
-在 JUnit 中调用继承的 `insert`、`selectById`、`updateById`、`deleteById`、`selectList`、`selectCount`、`selectPage`。使用 `LambdaQueryWrapper` 组合条件，通过 `Page` 和 `PaginationInnerInterceptor` 完成分页，并与原生查询比较结果。
+## 三、MyBatis-Plus 的 Mapper 设计
 
-### 4.6 会话工厂与实体
+### 1. 三个接口均继承 BaseMapper，具备基础 CRUD
 
-| 方法或配置 | 用途 |
-| --- | --- |
-| `getMyBatisFactory()` | 返回复用的原生 MyBatis `SqlSessionFactory` |
-| `getMyBatisPlusFactory()` | 返回复用的 MyBatis-Plus 会话工厂，注册分页插件 |
-| Lombok 实体配置 | `Student`、`Course`、`Enrollment` 使用 Lombok 生成访问方法，不手写 getter/setter |
+| 接口文件 | 定义 | 基础功能与扩展示例 |
+| --- | --- | --- |
+| `src/main/java/com/xinghe/plus/mapper/StudentMapper.java` | `extends BaseMapper<Student>` | 用 `insert、selectById、updateById、deleteById` 完成学生 CRUD |
+| `src/main/java/com/xinghe/plus/mapper/CourseMapper.java` | `extends BaseMapper<Course>` | 基础 CRUD；另用 `selectList(wrapper)` 实现课程多条件查询 |
+| `src/main/java/com/xinghe/plus/mapper/EnrollmentMapper.java` | `extends BaseMapper<Enrollment>` | 基础 CRUD；另用 `selectPage(page, wrapper)` 分页查看选课记录 |
 
-学生和课程编号使用 `Integer`，选课记录编号使用 `Long`；学分和成绩使用 `BigDecimal`，入学日期使用 `LocalDate`，选课时间使用 `LocalDateTime`。Mapper 新增、修改、删除方法返回影响行数，计数方法返回 `long`；单条查询未找到时返回 `null`，列表查询无结果时返回空列表。多参数 Mapper 方法显式标注 `@Param`。
+三个接口均通过继承获得 `insert、selectById、updateById、deleteById`，每张表都验证基础 CRUD。接口体可以为空，无需重复声明方法；条件查询和分页按上表分工，不添加包装 BaseMapper 调用的自定义方法。
 
-### 4.7 JUnit 测试方法
+**课程筛选：** 在测试或调用处构造 `LambdaQueryWrapper<Course>`，组合课程名称 `like`、教师 `like`、最低学分 `ge`，按 id 升序。条件为空时不加入对应限制。
 
-| 建议测试方法 | 验证内容 |
-| --- | --- |
-| `testStudentXmlCrud()` | XML CRUD、主键回填、动态更新、学号唯一和外键删除限制 |
-| `testCourseAnnotationCrud()` | 注解 CRUD、主键回填、课程代码唯一和外键删除限制 |
-| `testDynamicConditions()` | 无条件、单条件、组合条件、预设排序和空编号集合 |
-| `testNativePagination()` | 总数、首页、末页、超出页码及排序稳定性 |
-| `testAssociationMapping()` | 选课记录的学生和课程对象、重复字段别名 |
-| `testCollectionMapping()` | 学生选课集合、课程学生集合，以及空集合 |
-| `testEnrollmentConstraints()` | 同学期重复选课失败、跨学期重新选修成功 |
-| `testScoreAndStatistics()` | 成绩上下界、零分与空成绩、统计人数和平均分、无人选修课程 |
-| `testPlusCrud()` | 三张表的通用 CRUD |
-| `testPlusWrapperAndPagination()` | 条件构造器、插件分页，与原生结果对照 |
-| `testEnrollAndWithdraw()` | 选课、退课，拒绝退选已评分记录或其他学生的记录 |
-| `testChangeCourseCommit()` | 换课成功后旧记录删除、新记录存在 |
-| `testChangeCourseRollback()` | 删除旧记录后插入失败，旧记录恢复且无新记录 |
+**选课分页：** 构造 `LambdaQueryWrapper<Enrollment>`，按学生 ID 和学期精确筛选，按 id 升序；调用 `selectPage(new Page<>(1, 5), wrapper)`，查看记录列表、总数与总页数，并演示第 2 页。两个条件均可选，以便同时查看全体或某学生的选课记录。
 
-表中的方法按实验主题分组，具体实现时可以拆成多个独立或参数化测试。日志验证检查 SQL、绑定参数及结果数量，并结合断言排查映射问题。
+### 2. 实体注解映射
 
-## 五、核心组件与事务
+沿用 `com.xinghe.entity` 下的三个实体，后续只补充必要注解，不复制两套实体。
 
-- 原生 MyBatis 使用 `SqlSessionFactoryBuilder` 加载 XML 配置；MyBatis-Plus 使用其对应构建器配置通用 Mapper 与分页插件。
-- 两套工厂共享实体和数据库连接参数，工厂复用，每个测试独立获取并关闭 `SqlSession`。
-- 显式演示：读取配置 → 创建工厂 → `openSession()` → `getMapper()` → 执行 SQL → 映射结果 → 提交或回滚 → 关闭会话。
-- 换课前在同一个会话中锁定旧选课记录，验证其属于该学生且成绩为空、目标课程存在且不同于原课程，保持学期一致。
-- 删除旧记录时再次限定学生编号、学期及成绩为空，并检查受影响行数为1，再插入新记录；新记录成绩为空，选课时间为本次操作时间。
-- 删除与插入使用同一个 `SqlSession`；任一步失败均回滚。唯一约束处理并发重复选课，发生冲突时旧记录也必须恢复。
-- 校验学期格式、选课时间不早于入学日期；本实验不扩展选课容量、课表冲突、学分上限或教师独立实体。
-- 依赖版本统一管理，避免独立覆盖 MyBatis 传递依赖；补齐 Plus 分页所需的解析器模块。
+| 实体 | 表映射 | 主键映射 | 显式字段映射 |
+| --- | --- | --- | --- |
+| Student | `@TableName("student")` | `@TableId(value = "id", type = IdType.AUTO)` | `@TableField` 映射 `studentNo → student_no`、`enrollmentDate → enrollment_date` |
+| Course | `@TableName("course")` | 同上 | `@TableField` 映射 `courseNo → course_no` |
+| Enrollment | `@TableName("enrollment")` | 同上 | `@TableField` 映射 `studentId → student_id`、`courseId → course_id`、`selectedAt → selected_at` |
 
-## 六、测试与日志
+其余同名字段默认映射。参考：[实体注解](https://baomidou.com/reference/annotation/)、[BaseMapper 通用方法](https://baomidou.com/guides/data-interface/)。
 
-- XML CRUD、注解 CRUD：断言主键、字段值、受影响行数和删除结果；验证学号及课程代码唯一、外键删除限制。
-- 动态查询：验证无条件、单条件、组合条件、空集合，以及成绩为空与成绩为零的区别。
-- 结果映射：验证学生和课程对象、选课集合、空集合，以及三表关联字段的别名。
-- 分页：验证总数、第一页、末页、超出页码以及排序稳定性；页码从1开始，限制每页条数。
-- Plus：验证通用 CRUD、条件构造器、分页插件；与原生实现比较相同筛选条件下的记录编号及总数。
-- 选课与成绩：验证同学期重复选课失败、不同学期重新选修成功、成绩范围约束及按课程学期统计。
-- 事务：验证换课成功，以及删除完成后插入新记录失败时旧记录恢复；拒绝修改已评分记录或其他学生的记录。
-- 使用独立实验数据库和固定数据。修改类测试默认回滚，提交类测试清理自身数据，避免测试相互依赖。
-- Log4j 2 输出 SQL、参数及类型、结果数量；排查映射问题时开启 TRACE 级别日志。
-- 多参数方法显式使用 `@Param`，查询值使用参数绑定，排序选项采用预设白名单。
+### 3. 分页的最小配套配置
 
-## 七、建议目录
+- Plus 会话工厂使用 `MybatisSqlSessionFactoryBuilder`，注册 `com.xinghe.plus.mapper`；原生会话工厂注册 `com.xinghe.mybatis.mapper`，避免两套同名 Mapper 混用。
+- 在 Plus 会话工厂注册 `MybatisPlusInterceptor`，添加 `PaginationInnerInterceptor(DbType.MYSQL)`，只配置一次。
+- 沿用现有 Plus 核心、扩展及 `mybatis-plus-jsqlparser` 依赖；不更换项目框架、不引入 Spring Boot。
+- 确认日志生成数据库分页 SQL，并正确返回 `records、total、current、size、pages`。参考：[分页插件](https://baomidou.com/plugins/pagination/)。
 
-```text
-src/main/java/com/xinghe/
-  entity/                 # 学生、课程、选课记录
-  dto/                    # 查询条件、分页结果、关联查询结果
-  mybatis/mapper/          # 原生 XML 和注解 Mapper
-  plus/mapper/             # MyBatis-Plus Mapper
-  config/                 # 两套会话工厂及数据库配置加载
-  service/                # 学生换课事务
-src/main/resources/
-  mapper/                 # Mapper XML
-  mybatis-config.xml      # 原生 MyBatis 配置
-  log4j2.xml              # SQL 日志配置
-src/test/java/com/xinghe/ # 按实验内容划分 JUnit 测试
-sql/                      # 建表脚本、实验数据和校验脚本
-docs/                     # 实验计划、要求对照和排错记录
-README.md                 # 环境、连接参数、初始化和运行方式
-```
+以上实体注解与分页配置仅列入后续 Plus 配套实施范围，本次不修改。
 
-数据库凭据通过环境变量或忽略提交的本地配置提供，不写入仓库。当前 Docker 将3306端口映射到宿主机，Java/JUnit 连接地址为 `jdbc:mysql://127.0.0.1:3306/mybatis_experiment`。
+## 四、统一约定与后续验收
 
-## 八、实施步骤
+- 查询字符串先去除首尾空白；null、空串、纯空白视为未提供。模糊匹配使用 `LIKE CONCAT('%', #{...}, '%')`，不直接拼接用户输入。
+- 写操作返回影响行数；单条查询未找到返回 null，列表查询未找到返回空列表。
+- 批量插入要求集合非空、元素非 null、必填字段完整。学生、课程须已存在；同一学生、课程、学期不能重复选课，操作失败时回滚。
+- 批量删除的 null 或空集合必须在 SQL 中回退为 `WHERE 1 = 0`，影响 0 行，防止误删全表。
+- 删除被选课记录引用的学生或课程受外键限制；清理测试数据时先删选课记录，再删学生、课程。
+- 查询直接返回现有实体，不新增查询 DTO、关联结果类、联查统计或 Service。测试使用临时数据，写操作结束后回滚。
 
-- [x] 配置 Maven 依赖、JUnit 和 Lombok 注解处理器。
-- [x] 编写学生、课程、选课记录的建表、数据与校验脚本。
-- [ ] 创建实体，配置数据库连接、两套会话工厂和 Log4j 2。
-- [ ] 实现学生 XML CRUD、课程注解 CRUD，并完成对应测试。
-- [ ] 实现动态筛选、批量操作、关联映射、成绩统计及原生分页。
-- [ ] 实现三张表的 MyBatis-Plus CRUD、条件查询与插件分页。
-- [ ] 实现学生换课事务及成功/失败测试。
-- [ ] 完善 README、实验要求对照表和实际 AI 辅助排错记录。
+### 后续实施清单
 
-方法实现顺序：实体与会话工厂 → 学生 XML CRUD → 课程注解 CRUD → 动态查询与原生分页 → 选课、关联映射与成绩统计 → MyBatis-Plus 条件分页 → 选课、退课与换课事务。每一步完成对应 JUnit 测试后再进入下一步。
+- [x] StudentMapper 的 XML 实现 5 个方法，验证基础 CRUD、组合模糊查询、空条件、部分更新和未传字段保持原值。
+- [x] CourseMapper 的注解实现 5 个方法，验证基础 CRUD、三个 when、otherwise，以及多条件同时提供时仅命中最高优先级分支。
+- [x] EnrollmentMapper 的 XML 实现 7 个方法，验证基础 CRUD、批量选课、按学生学期查询、0 分登记、批量删除及空集合保护。
+- [ ] 为三个实体补充 Plus 注解，建立三个 Plus Mapper 并完成最小会话、分页配置。
+- [ ] Plus 三个 Mapper 均验证基础 CRUD；课程 Mapper 另验证多条件 Wrapper；选课 Mapper 另验证条件分页、第 2 页和总记录数。
 
-## 九、验收与交付
+最终规模：原生 MyBatis 共 17 个方法，学生、课程、选课 Mapper 分别有 5、5、7 个方法；Plus 共 3 个 BaseMapper 接口，无自定义业务方法。每个 Mapper 均具备基础 CRUD，扩展功能共同覆盖全部实验要求。
 
-按 README 配置实验数据库并初始化后，执行 `mvn test`，全部测试通过且可以重复运行。每项课程要求均对应具体代码、测试和演示步骤。
 
-交付源码、SQL 脚本、JUnit 测试、日志配置和实验文档。AI 排错记录保留真实问题的现象、日志、分析、修复及回归结果；数据库优化选取实际查询，结合执行计划验证效果。
+## 五、原生 MyBatis 实施与验证记录
+
+2026-10-19：已实现 Student 5 个、Course 5 个、Enrollment 7 个方法，并移除计划外的原生查询及对应旧测试。Student、Enrollment 使用 XML，Course 使用注解。
+
+按“每个 Mapper 方法对应一个测试方法”整理后执行 `mvn clean test`，结果为 `BUILD SUCCESS`：Student 5 项、Course 5 项、Enrollment 7 项，共 17 项测试，0 failures、0 errors、0 skipped。测试名使用 `test` + Mapper 方法名，每个用例保留简单的数据准备、调用和关键断言；写操作使用临时数据并回滚。
+
+当前测试覆盖各表基础 CRUD、组合模糊查询、部分字段更新、课程各个优先分支及不回退、学生学期查询、批量增删、0 分与未评分，以及空集合删除保护；不再加入独立的复杂异常流程。更新必填项、非空批次和成绩范围等前置校验仍由调用方负责，接口注释说明契约；精简后的测试不再实现或单独测试辅助校验逻辑。
+
+本阶段未修改 Maven 依赖、MyBatis 会话配置、实体、表结构或 Plus 实现。

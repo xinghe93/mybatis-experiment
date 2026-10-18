@@ -9,101 +9,104 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class CourseMapperTest {
+class CourseMapperTest {
 
-    private SqlSession sqlSession;
-    private CourseMapper courseMapper;
+    private SqlSession session;
+    private CourseMapper mapper;
 
     @BeforeEach
-    void openSession() {
-        sqlSession = MyBatisUtil.getSqlSessionFactory().openSession();
-        courseMapper = sqlSession.getMapper(CourseMapper.class);
+    void setUp() {
+        session = MyBatisUtil.getSqlSessionFactory().openSession();
+        mapper = session.getMapper(CourseMapper.class);
     }
 
     @AfterEach
-    void rollbackAndCloseSession() {
-        if (sqlSession != null) {
+    void tearDown() {
+        if (session != null) {
             try {
-                // 即使断言失败也回滚，测试不永久修改实验数据。
-                sqlSession.rollback();
+                session.rollback();
             } finally {
-                sqlSession.close();
+                session.close();
             }
         }
     }
 
-    // 新增课程，并检查主键回填
     @Test
     void testInsert() {
-        Course course = newTestCourse();
-
-        assertEquals(1, courseMapper.insert(course));
+        Course course = newCourse("数据库", "李老师");
+        assertEquals(1, mapper.insert(course));
         assertNotNull(course.getId());
     }
 
-    // 根据 ID 查询课程
     @Test
     void testSelectById() {
-        Course course = insertTestCourse();
-
-        assertEquals(course, courseMapper.selectById(course.getId()));
+        Course course = insertCourse("数据库", "李老师");
+        assertEquals(course, mapper.selectById(course.getId()));
     }
 
-    // 查询全部课程
-    @Test
-    void testSelectAll() {
-        Course course = insertTestCourse();
-
-        assertTrue(courseMapper.selectAll().contains(course));
-    }
-
-    // 只修改教师，其他字段保持原值
     @Test
     void testUpdateById() {
-        Course course = insertTestCourse();
-
-        Course update = new Course();
-        update.setId(course.getId());
-        update.setTeacher("新教师");
-        assertEquals(1, courseMapper.updateById(update));
-
-        course.setTeacher("新教师");
-        assertEquals(course, courseMapper.selectById(course.getId()));
+        Course course = insertCourse("数据库", "李老师");
+        course.setName("数据库原理");
+        course.setCredit(new BigDecimal("3.0"));
+        course.setHours((short) 48);
+        course.setTeacher("王老师");
+        assertEquals(1, mapper.updateById(course));
+        assertEquals(course, mapper.selectById(course.getId()));
     }
 
-    // 删除课程
     @Test
     void testDeleteById() {
-        Course course = insertTestCourse();
-
-        assertEquals(1, courseMapper.deleteById(course.getId()));
-        assertNull(courseMapper.selectById(course.getId()));
+        Course course = insertCourse("数据库", "李老师");
+        assertEquals(1, mapper.deleteById(course.getId()));
+        assertNull(mapper.selectById(course.getId()));
     }
 
-    /** 构造临时课程对象，不写入数据库。 */
-    private Course newTestCourse() {
+    @Test
+    void testSelectByPriority() {
+        String token = UUID.randomUUID().toString().substring(0, 8);
+        Course first = insertCourse("数据" + token, "教师" + token);
+        Course second = insertCourse("数据" + token, "其他教师");
+        Course third = insertCourse("其他课程", "教师" + token);
+
+        Course condition = new Course();
+        condition.setCourseNo("  " + first.getCourseNo() + "  ");
+        condition.setName("不存在");
+        assertEquals(List.of(first), mapper.selectByPriority(condition));
+
+        condition.setCourseNo("  ");
+        condition.setName("  " + token + "  ");
+        condition.setTeacher("不存在");
+        assertEquals(List.of(first, second), mapper.selectByPriority(condition));
+
+        condition.setName("");
+        condition.setTeacher("  " + token + "  ");
+        assertEquals(List.of(first, third), mapper.selectByPriority(condition));
+
+        condition.setCourseNo(first.getCourseNo().substring(0, 18));
+        condition.setName(token);
+        assertTrue(mapper.selectByPriority(condition).isEmpty(), "代码精确匹配，未命中也不回退");
+        assertTrue(mapper.selectByPriority(null).containsAll(List.of(first, second, third)), "otherwise 查询全部");
+    }
+
+    private Course insertCourse(String name, String teacher) {
+        Course course = newCourse(name, teacher);
+        mapper.insert(course);
+        return course;
+    }
+
+    private Course newCourse(String name, String teacher) {
         Course course = new Course();
-        course.setCourseNo("test" + UUID.randomUUID().toString().replace("-", "").substring(0, 16));
-        course.setName("测试课程");
+        course.setCourseNo(UUID.randomUUID().toString().substring(0, 20));
+        course.setName(name);
         course.setCredit(new BigDecimal("2.0"));
         course.setHours((short) 32);
-        course.setTeacher("原教师");
+        course.setTeacher(teacher);
         return course;
     }
-
-    /** 插入临时课程，并检查影响行数和主键回填。 */
-    private Course insertTestCourse() {
-        Course course = newTestCourse();
-        assertEquals(1, courseMapper.insert(course));
-        assertNotNull(course.getId());
-        return course;
-    }
-
 }

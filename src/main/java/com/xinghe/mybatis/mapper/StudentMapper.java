@@ -12,24 +12,21 @@ public interface StudentMapper {
 
     Student selectById(Integer id);
 
+    /**
+     * 调用前校验 ID 非空，且至少提供一个可更新字段；学号不参与更新。
+     */
     int updateById(Student student);
 
     /**
-     * 按编号删除学生，不删除关联的选课记录。
+     * 按 ID 删除学生，关联选课由数据库外键限制。
      *
-     * @param id 学生编号
-     * @return 删除成功返回 1；学生不存在返回 0
-     * @throws PersistenceException 数据库操作失败时抛出；有选课记录时，
-     *                              外键约束会拒绝删除，底层原因是 SQL 完整性约束异常
+     * @throws PersistenceException 存在选课记录等数据库约束导致删除失败
      */
     int deleteById(Integer id);
 
-    List<Student> selectByCondition(Student student);
-
-    List<Student> selectByIds(List<Integer> ids);
-
-    int countByCondition(Student student);
-
-    List<Student> selectPage(@Param("offset") int offset, @Param("pageSize") int pageSize);
+    /**
+     * 姓名、专业模糊匹配，年级精确匹配；null 或空白条件不参与查询。
+     */
+    List<Student> selectByCondition(@Param("condition") Student student);
 
 }

@@ -18,142 +18,114 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-public class EnrollmentMapperTest {
+class EnrollmentMapperTest {
 
-    private SqlSession sqlSession;
-    private EnrollmentMapper enrollmentMapper;
+    private SqlSession session;
+    private EnrollmentMapper mapper;
 
     @BeforeEach
-    void openSession() {
-        sqlSession = MyBatisUtil.getSqlSessionFactory().openSession();
-        enrollmentMapper = sqlSession.getMapper(EnrollmentMapper.class);
+    void setUp() {
+        session = MyBatisUtil.getSqlSessionFactory().openSession();
+        mapper = session.getMapper(EnrollmentMapper.class);
     }
 
     @AfterEach
-    void rollbackAndCloseSession() {
-        if (sqlSession != null) {
+    void tearDown() {
+        if (session != null) {
             try {
-                sqlSession.rollback();
+                session.rollback();
             } finally {
-                sqlSession.close();
+                session.close();
             }
         }
     }
 
-    // 新增选课记录，并检查主键回填。
     @Test
     void testInsert() {
-        Enrollment enrollment = newTestEnrollment();
-
-        assertEquals(1, enrollmentMapper.insert(enrollment));
+        Enrollment enrollment = newEnrollment();
+        assertEquals(1, mapper.insert(enrollment));
         assertNotNull(enrollment.getId());
     }
 
-    // 根据 ID 查询，检查所有字段是否正确映射。
     @Test
     void testSelectById() {
-        Enrollment enrollment = newTestEnrollment();
-        enrollment.setScore(new BigDecimal("0.00"));
-        assertEquals(1, enrollmentMapper.insert(enrollment));
-
-        assertEquals(enrollment, enrollmentMapper.selectById(enrollment.getId()));
+        Enrollment enrollment = insertEnrollment();
+        assertEquals(enrollment, mapper.selectById(enrollment.getId()));
     }
 
-    // 查询全部选课记录。
-    @Test
-    void testSelectAll() {
-        Enrollment enrollment = insertTestEnrollment();
-
-        assertTrue(enrollmentMapper.selectAll().contains(enrollment));
-    }
-
-    // 只更新成绩，零分是有效成绩，其他字段应保持原值。
     @Test
     void testUpdateById() {
-        Enrollment enrollment = insertTestEnrollment();
+        Enrollment enrollment = insertEnrollment();
         Enrollment update = new Enrollment();
         update.setId(enrollment.getId());
         update.setScore(new BigDecimal("0.00"));
-
-        assertEquals(1, enrollmentMapper.updateById(update));
+        assertEquals(1, mapper.updateById(update));
         enrollment.setScore(update.getScore());
-        assertEquals(enrollment, enrollmentMapper.selectById(enrollment.getId()));
+        assertEquals(enrollment, mapper.selectById(enrollment.getId()), "零分有效，其他字段保持原值");
     }
 
-    // 删除后应查询不到。
     @Test
     void testDeleteById() {
-        Enrollment enrollment = insertTestEnrollment();
-
-        assertEquals(1, enrollmentMapper.deleteById(enrollment.getId()));
-        assertNull(enrollmentMapper.selectById(enrollment.getId()));
+        Enrollment enrollment = insertEnrollment();
+        assertEquals(1, mapper.deleteById(enrollment.getId()));
+        assertNull(mapper.selectById(enrollment.getId()));
     }
 
-    // 按学生、课程、学期和成绩查询。
     @Test
-    void testSelectByCondition() {
-        Enrollment enrollment = newTestEnrollment();
-        enrollment.setScore(new BigDecimal("0.00"));
-        assertEquals(1, enrollmentMapper.insert(enrollment));
-        Enrollment condition = new Enrollment();
-        condition.setStudentId(enrollment.getStudentId());
-        condition.setCourseId(enrollment.getCourseId());
-        condition.setSemester(enrollment.getSemester());
-        condition.setScore(enrollment.getScore());
+    void testInsertBatch() {
+        Enrollment first = newEnrollment();
+        Enrollment second = newEnrollment();
+        second.setStudentId(first.getStudentId());
+        second.setScore(new BigDecimal("0.00"));
+        assertEquals(2, mapper.insertBatch(List.of(first, second)));
 
-        assertEquals(List.of(enrollment), enrollmentMapper.selectByCondition(condition));
+        List<Enrollment> records = mapper.selectByStudentAndSemester(first.getStudentId(), first.getSemester());
+        assertEquals(List.of(first.getCourseId(), second.getCourseId()),
+                records.stream().map(Enrollment::getCourseId).toList());
+        assertNull(records.get(0).getScore());
+        assertEquals(new BigDecimal("0.00"), records.get(1).getScore());
     }
 
-    // 批量查询按 ID 升序返回，空集合或 null 返回空列表。
     @Test
-    void testSelectByIds() {
-        Enrollment first = insertTestEnrollment();
-        Enrollment second = insertTestEnrollment();
+    void testSelectByStudentAndSemester() {
+        Enrollment expected = insertEnrollment();
+        Enrollment otherSemester = newEnrollment();
+        otherSemester.setStudentId(expected.getStudentId());
+        otherSemester.setSemester("2026-2027-2");
+        mapper.insert(otherSemester);
+        insertEnrollment(); // 同学期的另一名学生不应被查出。
 
-        assertEquals(List.of(first, second), enrollmentMapper.selectByIds(
-                List.of(second.getId(), first.getId())));
-        assertTrue(enrollmentMapper.selectByIds(List.of()).isEmpty());
-        assertTrue(enrollmentMapper.selectByIds(null).isEmpty());
+        assertEquals(List.of(expected),
+                mapper.selectByStudentAndSemester(expected.getStudentId(), expected.getSemester()));
+        assertTrue(mapper.selectByStudentAndSemester(expected.getStudentId(), "2026").isEmpty());
     }
 
-    // 统计指定学生的选课数量。
     @Test
-    void testCountByCondition() {
-        Enrollment enrollment = insertTestEnrollment();
-        Enrollment condition = new Enrollment();
-        condition.setStudentId(enrollment.getStudentId());
+    void testDeleteBatch() {
+        Enrollment first = insertEnrollment();
+        Enrollment second = insertEnrollment();
+        Enrollment untouched = insertEnrollment();
+        assertEquals(0, mapper.deleteBatch(null));
+        assertEquals(0, mapper.deleteBatch(List.of()));
+        assertEquals(first, mapper.selectById(first.getId()));
 
-        assertEquals(1, enrollmentMapper.countByCondition(condition));
+        assertEquals(2, mapper.deleteBatch(List.of(first.getId(), second.getId())));
+        assertNull(mapper.selectById(first.getId()));
+        assertNull(mapper.selectById(second.getId()));
+        assertEquals(untouched, mapper.selectById(untouched.getId()));
     }
 
-    // 查询第二页，每页两条。
-    @Test
-    void testSelectPage() {
-        insertTestEnrollment();
-        insertTestEnrollment();
-        insertTestEnrollment();
-        List<Enrollment> all = enrollmentMapper.selectAll();
-
-        assertEquals(all.subList(2, Math.min(4, all.size())),
-                enrollmentMapper.selectPage(2, 2));
-    }
-
-    private Enrollment insertTestEnrollment() {
-        Enrollment enrollment = newTestEnrollment();
-        assertEquals(1, enrollmentMapper.insert(enrollment));
-        assertNotNull(enrollment.getId());
+    private Enrollment insertEnrollment() {
+        Enrollment enrollment = newEnrollment();
+        mapper.insert(enrollment);
         return enrollment;
     }
 
-    /** 先创建学生和课程，满足选课记录的外键约束；所有数据都会一起回滚。 */
-    private Enrollment newTestEnrollment() {
-        String number = "test" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-
+    // 先创建父表数据，满足外键；所有数据由 tearDown 一并回滚。
+    private Enrollment newEnrollment() {
+        String number = UUID.randomUUID().toString().substring(0, 20);
         Student student = new Student();
         student.setStudentNo(number);
         student.setName("测试学生");
@@ -161,7 +133,7 @@ public class EnrollmentMapperTest {
         student.setMajor("软件工程");
         student.setGrade((short) 2026);
         student.setEnrollmentDate(LocalDate.of(2026, 9, 1));
-        assertEquals(1, sqlSession.getMapper(StudentMapper.class).insert(student));
+        assertEquals(1, session.getMapper(StudentMapper.class).insert(student));
 
         Course course = new Course();
         course.setCourseNo(number);
@@ -169,7 +141,7 @@ public class EnrollmentMapperTest {
         course.setCredit(new BigDecimal("2.0"));
         course.setHours((short) 32);
         course.setTeacher("测试教师");
-        assertEquals(1, sqlSession.getMapper(CourseMapper.class).insert(course));
+        assertEquals(1, session.getMapper(CourseMapper.class).insert(course));
 
         Enrollment enrollment = new Enrollment();
         enrollment.setStudentId(student.getId());
