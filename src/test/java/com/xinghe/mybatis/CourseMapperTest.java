@@ -39,7 +39,7 @@ public class CourseMapperTest {
         }
     }
 
-    // 新增课程，并检查主键回填。
+    // 新增课程，并检查主键回填
     @Test
     void testInsert() {
         Course course = newTestCourse();
@@ -48,7 +48,7 @@ public class CourseMapperTest {
         assertNotNull(course.getId());
     }
 
-    // 根据 ID 查询课程。
+    // 根据 ID 查询课程
     @Test
     void testSelectById() {
         Course course = insertTestCourse();
@@ -56,7 +56,7 @@ public class CourseMapperTest {
         assertEquals(course, courseMapper.selectById(course.getId()));
     }
 
-    // 查询全部课程，结果应包含刚新增的课程。
+    // 查询全部课程
     @Test
     void testSelectAll() {
         Course course = insertTestCourse();
@@ -64,7 +64,7 @@ public class CourseMapperTest {
         assertTrue(courseMapper.selectAll().contains(course));
     }
 
-    // 只修改教师，其他字段保持原值。
+    // 只修改教师，其他字段保持原值
     @Test
     void testUpdateById() {
         Course course = insertTestCourse();
@@ -78,7 +78,7 @@ public class CourseMapperTest {
         assertEquals(course, courseMapper.selectById(course.getId()));
     }
 
-    // 删除课程，删除后应查询不到。
+    // 删除课程
     @Test
     void testDeleteById() {
         Course course = insertTestCourse();

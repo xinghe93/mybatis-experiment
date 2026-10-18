@@ -13,4 +13,100 @@
         VALUES (#{studentId}, #{courseId}, #{semester}, #{selectedAt}, #{score})
     </insert>
 
+    <select id="selectById" resultType="Enrollment">
+        SELECT id, student_id, course_id, semester, selected_at, score
+        FROM enrollment
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="Enrollment">
+        SELECT id, student_id, course_id, semester, selected_at, score
+        FROM enrollment
+        ORDER BY id
+    </select>
+
+    <update id="updateById">
+        UPDATE enrollment
+        <set>
+            <if test="studentId != null">
+                student_id = #{studentId},
+            </if>
+            <if test="courseId != null">
+                course_id = #{courseId},
+            </if>
+            <if test="semester != null">
+                semester = #{semester},
+            </if>
+            <if test="selectedAt != null">
+                selected_at = #{selectedAt},
+            </if>
+            <if test="score != null">
+                score = #{score},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM enrollment
+        WHERE id = #{id}
+    </delete>
+
+    <!-- 条件查询和统计复用相同的筛选条件。 -->
+    <sql id="enrollmentCondition">
+        <where>
+            <if test="_parameter != null">
+                <if test="studentId != null">
+                    AND student_id = #{studentId}
+                </if>
+                <if test="courseId != null">
+                    AND course_id = #{courseId}
+                </if>
+                <if test="semester != null and semester != ''">
+                    AND semester = #{semester}
+                </if>
+                <if test="score != null">
+                    AND score = #{score}
+                </if>
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectByCondition" resultType="Enrollment">
+        SELECT id, student_id, course_id, semester, selected_at, score
+        FROM enrollment
+        <include refid="enrollmentCondition"/>
+        ORDER BY id
+    </select>
+
+    <select id="selectByIds" resultType="Enrollment">
+        SELECT id, student_id, course_id, semester, selected_at, score
+        FROM enrollment
+        <choose>
+            <when test="ids != null and ids.size() > 0">
+                WHERE id IN
+                <foreach collection="ids" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </when>
+            <otherwise>
+                WHERE 1 = 0
+            </otherwise>
+        </choose>
+        ORDER BY id
+    </select>
+
+    <select id="countByCondition" resultType="int">
+        SELECT COUNT(*)
+        FROM enrollment
+        <include refid="enrollmentCondition"/>
+    </select>
+
+    <select id="selectPage" resultType="Enrollment">
+        SELECT id, student_id, course_id, semester, selected_at, score
+        FROM enrollment
+        ORDER BY id
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
 </mapper>
