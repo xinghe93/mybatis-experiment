@@ -2,7 +2,7 @@
 
 **目标：** 学生用于信息管理，课程用于查找课程，选课记录用于批量选课、成绩登记和记录查询。
 
-**范围：** 保持现有项目框架和三张表不变；原生代码放在 `com.xinghe.mybatis.mapper`，Plus 代码放在 `com.xinghe.plus.mapper`。本次仅实施原生 MyBatis Mapper、对应 XML / 注解和测试；Plus 实现暂不改动。
+**范围：** 保持现有项目框架和三张表不变；原生代码放在 `com.xinghe.mybatis.mapper`，Plus 代码放在 `com.xinghe.plus.mapper`。已完成原生 MyBatis 与 MyBatis-Plus 两套实现及测试；两套 Mapper 使用独立的 SqlSessionFactory，共用实体与数据库连接参数。
 
 ## 一、实验要求如何分配
 
@@ -101,7 +101,7 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 
 ### 2. 实体注解映射
 
-沿用 `com.xinghe.entity` 下的三个实体，后续只补充必要注解，不复制两套实体。
+沿用 `com.xinghe.entity` 下的三个实体，已补充必要的 Plus 注解，不复制两套实体。
 
 | 实体 | 表映射 | 主键映射 | 显式字段映射 |
 | --- | --- | --- | --- |
@@ -118,7 +118,7 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 - 沿用现有 Plus 核心、扩展及 `mybatis-plus-jsqlparser` 依赖；不更换项目框架、不引入 Spring Boot。
 - 确认日志生成数据库分页 SQL，并正确返回 `records、total、current、size、pages`。参考：[分页插件](https://baomidou.com/plugins/pagination/)。
 
-以上实体注解与分页配置仅列入后续 Plus 配套实施范围，本次不修改。
+实体注解已补齐；Plus 使用 `src/main/resources/mybatis-plus-config.xml` 和 `src/main/java/com/xinghe/util/MyBatisPlusUtil.java`，通过独立会话工厂加载分页插件。原生会话工厂及配置保持不变。
 
 ## 四、统一约定与后续验收
 
@@ -129,13 +129,13 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 - 删除被选课记录引用的学生或课程受外键限制；清理测试数据时先删选课记录，再删学生、课程。
 - 查询直接返回现有实体，不新增查询 DTO、关联结果类、联查统计或 Service。测试使用临时数据，写操作结束后回滚。
 
-### 后续实施清单
+### 实施清单
 
 - [x] StudentMapper 的 XML 实现 5 个方法，验证基础 CRUD、组合模糊查询、空条件、部分更新和未传字段保持原值。
 - [x] CourseMapper 的注解实现 5 个方法，验证基础 CRUD、三个 when、otherwise，以及多条件同时提供时仅命中最高优先级分支。
 - [x] EnrollmentMapper 的 XML 实现 7 个方法，验证基础 CRUD、批量选课、按学生学期查询、0 分登记、批量删除及空集合保护。
-- [ ] 为三个实体补充 Plus 注解，建立三个 Plus Mapper 并完成最小会话、分页配置。
-- [ ] Plus 三个 Mapper 均验证基础 CRUD；课程 Mapper 另验证多条件 Wrapper；选课 Mapper 另验证条件分页、第 2 页和总记录数。
+- [x] 为三个实体补充 Plus 注解，建立三个 Plus Mapper 并完成最小会话、分页配置。
+- [x] Plus 三个 Mapper 均验证基础 CRUD；课程 Mapper 另验证多条件 Wrapper；选课 Mapper 另验证条件分页、第 2 页和总记录数。
 
 最终规模：原生 MyBatis 共 17 个方法，学生、课程、选课 Mapper 分别有 5、5、7 个方法；Plus 共 3 个 BaseMapper 接口，无自定义业务方法。每个 Mapper 均具备基础 CRUD，扩展功能共同覆盖全部实验要求。
 
@@ -149,3 +149,22 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 当前测试覆盖各表基础 CRUD、组合模糊查询、部分字段更新、课程各个优先分支及不回退、学生学期查询、批量增删、0 分与未评分，以及空集合删除保护；不再加入独立的复杂异常流程。更新必填项、非空批次和成绩范围等前置校验仍由调用方负责，接口注释说明契约；精简后的测试不再实现或单独测试辅助校验逻辑。
 
 本阶段未修改 Maven 依赖、MyBatis 会话配置、实体、表结构或 Plus 实现。
+
+
+## 六、MyBatis-Plus 实施与验证记录
+
+2026-10-19：已完成三个实体的表名、主键自增及字段映射注解；三个 Plus Mapper 均为空接口并继承对应的 BaseMapper，没有手写 SQL 或新增业务方法。
+
+Plus 配置共用 `db.properties`，仅注册 `com.xinghe.plus.mapper`。`MyBatisPlusUtil` 使用 Plus 构建器创建独立会话工厂，并注册 `MybatisPlusInterceptor` 与 MySQL 分页拦截器；没有引入 Spring Boot 或修改现有依赖。
+
+新增三个简单测试类，每个演示方法对应一个测试方法：
+
+| 测试类 | 测试数量 | 覆盖内容 |
+| --- | --- | --- |
+| `com.xinghe.plus.StudentMapperTest` | 4 | insert、selectById、updateById、deleteById |
+| `com.xinghe.plus.CourseMapperTest` | 5 | CRUD、selectList 的名称/教师模糊匹配与学分下限，省略可选条件 |
+| `com.xinghe.plus.EnrollmentMapperTest` | 5 | CRUD、按学生和学期筛选分页，验证两页记录与分页元数据 |
+
+执行 `mvn clean test`，共 31 项测试通过（原生 17 项 + Plus 14 项），0 failures、0 errors、0 skipped。测试创建临时数据并回滚。SQL 日志确认课程条件生成 AND 组合，选课分页生成 COUNT 查询与两页 LIMIT 查询。
+
+已额外验证分页插件的必要性：不注册拦截器时，分页用例因第一页返回 6 条而非预期 5 条失败；恢复后通过。全部实验要求现已具备对应实现和演示测试。
