@@ -44,7 +44,8 @@
     </insert>
 
     <select id="selectById" resultMap="studentMap">
-        SELECT <include refid="studentColumns"/>
+        SELECT
+        <include refid="studentColumns"/>
         FROM student
         WHERE id = #{id}
     </select>
@@ -80,7 +81,8 @@
 
     <!-- <where>/<if> 省略空条件，并用 AND 组合；<bind> 去除查询值首尾空格。 -->
     <select id="selectByCondition" resultMap="studentMap">
-        SELECT <include refid="studentColumns"/>
+        SELECT
+        <include refid="studentColumns"/>
         FROM student
         <where>
             <include refid="studentConditions"/>
@@ -90,7 +92,8 @@
 
     <!-- 非空时补 WHERE 并去掉开头的 AND/OR；空条件时不生成 WHERE。 -->
     <select id="selectByConditionWithTrim" resultMap="studentMap">
-        SELECT <include refid="studentColumns"/>
+        SELECT
+        <include refid="studentColumns"/>
         FROM student
         <trim prefix="WHERE" prefixOverrides="AND |OR ">
             <include refid="studentConditions"/>
