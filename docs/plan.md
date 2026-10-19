@@ -9,6 +9,8 @@
 | 技术 | 实验要求 | 主要落点 |
 | --- | --- | --- |
 | MyBatis | 多条件模糊查询：`if / where` | StudentMapper：按姓名、专业、年级筛选学生 |
+| MyBatis | 显式结果映射与 `trim` 等效查询 | StudentMapper：完整 `resultMap`，对照 `where` 与 `trim` |
+| MyBatis / MyBatis-Plus | 手动提交事务 | 已有增删改、批量操作及测试数据准备均显式 commit，测试结束后清理临时数据 |
 | MyBatis | 动态更新：`set` | StudentMapper：只修改传入的学生信息 |
 | MyBatis | 批量插入：`foreach` | EnrollmentMapper：一次为学生添加多条选课记录 |
 | MyBatis | 批量删除：`foreach` | EnrollmentMapper：按选课记录 ID 批量删除 |
@@ -22,7 +24,7 @@
 
 每个接口都包含 `insert、selectById、updateById、deleteById`，扩展查询和批量操作按业务分配。
 
-### 1. StudentMapper：学生信息维护，共 5 个方法
+### 1. StudentMapper：学生信息维护，共 6 个方法
 
 接口：`src/main/java/com/xinghe/mybatis/mapper/StudentMapper.java`。
 
@@ -35,8 +37,11 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/StudentMapper.xml`。
 | `int updateById(Student student)` | 修改学生信息 | `set / if` 按需更新姓名、性别、专业、年级、入学日期，WHERE 固定按 id |
 | `int deleteById(Integer id)` | 删除学生 | 按主键删除；存在选课记录时由外键拒绝 |
 | `List<Student> selectByCondition(@Param("condition") Student condition)` | 筛选学生 | 姓名、专业模糊匹配；年级精确匹配；`if / where` 组合条件 |
+| `List<Student> selectByConditionWithTrim(@Param("condition") Student condition)` | 等效筛选演示 | 共用条件片段，使用 `trim prefix="WHERE" prefixOverrides="AND \|OR "` 替代 `where` |
 
 组合查询示例：姓名包含“张”、专业包含“计算机”、年级为 2026，同时提供时三个条件按 AND 组合。空条件查询全部，列表按 id 升序。
+
+三个查询均使用 `studentMap` 显式映射全部 7 个字段，设置 `autoMapping="false"`，演示不依赖全局驼峰设置的结果映射。字段列表与查询条件分别提取为 `studentColumns`、`studentConditions` SQL 片段，通过 `include` 复用。
 
 更新时学号不参与修改，null 字段保持原值；调用前要求提供 id 和至少一个有效更新字段，避免生成空 SET。
 
@@ -127,17 +132,18 @@ SQL：`src/main/resources/com/xinghe/mybatis/mapper/EnrollmentMapper.xml`。
 - 批量插入要求集合非空、元素非 null、必填字段完整。学生、课程须已存在；同一学生、课程、学期不能重复选课，操作失败时回滚。
 - 批量删除的 null 或空集合必须在 SQL 中回退为 `WHERE 1 = 0`，影响 0 行，防止误删全表。
 - 删除被选课记录引用的学生或课程受外键限制；清理测试数据时先删选课记录，再删学生、课程。
-- 查询直接返回现有实体，不新增查询 DTO、关联结果类、联查统计或 Service。测试使用临时数据，写操作结束后回滚。
+- 查询直接返回现有实体，不新增查询 DTO、关联结果类、联查统计或 Service。测试中的增删改、批量操作和数据准备均在写入成功后显式 `session.commit()`；测试结束后按外键顺序删除本次创建的记录并提交清理。异常中断时，仅回滚尚未提交的操作。
 
 ### 实施清单
 
-- [x] StudentMapper 的 XML 实现 5 个方法，验证基础 CRUD、组合模糊查询、空条件、部分更新和未传字段保持原值。
+- [x] StudentMapper 的 XML 实现 6 个方法，验证基础 CRUD、组合模糊查询、空条件、部分更新、完整结果映射及 trim 等效查询。
+- [x] 六个 Mapper 测试类的写操作均显式提交，使用 TestDataCleaner 清理已提交的临时记录。
 - [x] CourseMapper 的注解实现 5 个方法，验证基础 CRUD、三个 when、otherwise，以及多条件同时提供时仅命中最高优先级分支。
 - [x] EnrollmentMapper 的 XML 实现 7 个方法，验证基础 CRUD、批量选课、按学生学期查询、0 分登记、批量删除及空集合保护。
 - [x] 为三个实体补充 Plus 注解，建立三个 Plus Mapper 并完成最小会话、分页配置。
 - [x] Plus 三个 Mapper 均验证基础 CRUD；课程 Mapper 另验证多条件 Wrapper；选课 Mapper 另验证条件分页、第 2 页和总记录数。
 
-最终规模：原生 MyBatis 共 17 个方法，学生、课程、选课 Mapper 分别有 5、5、7 个方法；Plus 共 3 个 BaseMapper 接口，无自定义业务方法。每个 Mapper 均具备基础 CRUD，扩展功能共同覆盖全部实验要求。
+当前规模：原生 MyBatis 共 18 个 Mapper 方法，学生、课程、选课 Mapper 分别有 6、5、7 个方法。Plus 共 3 个 BaseMapper 接口，无自定义业务方法。事务提交直接在已有增删改测试中演示。核心编码功能已覆盖；故障演练、ApiFox 练习与完整实验报告仍需另行核对。
 
 
 ## 五、原生 MyBatis 实施与验证记录
@@ -167,4 +173,18 @@ Plus 配置共用 `db.properties`，仅注册 `com.xinghe.plus.mapper`。`MyBati
 
 执行 `mvn clean test`，共 31 项测试通过（原生 17 项 + Plus 14 项），0 failures、0 errors、0 skipped。测试创建临时数据并回滚。SQL 日志确认课程条件生成 AND 组合，选课分页生成 COUNT 查询与两页 LIMIT 查询。
 
-已额外验证分页插件的必要性：不注册拦截器时，分页用例因第一页返回 6 条而非预期 5 条失败；恢复后通过。全部实验要求现已具备对应实现和演示测试。
+已额外验证分页插件的必要性：不注册拦截器时，分页用例因第一页返回 6 条而非预期 5 条失败；恢复后通过。本阶段完成核心功能实现与正常场景测试，后续教学步骤补充见第七节。
+
+## 七、显式映射、trim 与增删改事务提交
+
+2026-10-19：为 StudentMapper 增加完整的 `studentMap`，用于按 ID、where 条件及 trim 条件查询；继续由其他原生 Mapper 演示全局驼峰映射。
+
+新增 `selectByConditionWithTrim` 与对应测试，直接断言组合条件、仅专业条件的预期记录，并对照原 where 查询验证纯空白对象、null 条件查询全部，以及无匹配时返回空列表。先运行测试确认缺少 SQL 映射时出现 `Invalid bound statement`，补齐 XML 后通过。
+
+六个原生 / Plus Mapper 测试类在已有 insert、updateById、deleteById、insertBatch、deleteBatch 和测试数据准备之后直接调用 `session.commit()`，不再保留独立的事务演示类。更新与删除的后续查询在提交后执行，避开原会话一级缓存中的结果。
+
+新增共用的 `TestDataCleaner`，登记本次测试创建的学生、课程对象；测试结束后先回滚尚未提交的操作并关闭原会话，再用新会话按选课、课程、学生的顺序删除这些临时数据并提交。清理 SQL 使用主键参数定位本次创建的记录。
+
+测试结构已简化：选课测试分别使用 `insertStudent`、`insertCourse` 准备父表数据，`newEnrollment` 只构造对象，`insertEnrollment` 负责插入并提交。同一学生的多条选课复用学生 ID，分页用一个循环准备 6 条记录；不再创建学生后又替换其 ID。六个测试类使用 try-with-resources 关闭会话，所有单条插入测试均在提交后查询并核对完整实体。
+
+执行 `mvn -o -Dmaven.repo.local=/Users/xinghe/dev/tools/maven/maven-repository clean test`，共 32 项测试通过（原生 Mapper 18 项、Plus 14 项），0 failures、0 errors、0 skipped。运行前后只读核对表中记录数量，均为 student 30、course 8、enrollment 60。

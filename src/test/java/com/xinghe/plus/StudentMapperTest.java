@@ -2,12 +2,14 @@ package com.xinghe.plus;
 
 import com.xinghe.entity.Student;
 import com.xinghe.plus.mapper.StudentMapper;
+import com.xinghe.support.TestDataCleaner;
 import com.xinghe.util.MyBatisPlusUtil;
 import org.apache.ibatis.session.SqlSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -15,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class StudentMapperTest {
 
+    private final TestDataCleaner testData = new TestDataCleaner();
     private SqlSession session;
     private StudentMapper mapper;
 
@@ -25,13 +28,13 @@ class StudentMapperTest {
     }
 
     @AfterEach
-    void tearDown() {
-        if (session != null) {
-            try {
-                session.rollback(); // 临时数据随事务回滚。
-            } finally {
-                session.close();
+    void tearDown() throws SQLException {
+        try (SqlSession currentSession = session) {
+            if (currentSession != null) {
+                currentSession.rollback(); // 仅回滚异常中断时尚未提交的操作。
             }
+        } finally {
+            testData.clean(MyBatisPlusUtil.getSqlSessionFactory());
         }
     }
 
@@ -39,7 +42,9 @@ class StudentMapperTest {
     void testInsert() {
         Student student = newStudent();
         assertEquals(1, mapper.insert(student));
+        session.commit();
         assertNotNull(student.getId());
+        assertEquals(student, mapper.selectById(student.getId()));
     }
 
     @Test
@@ -55,6 +60,7 @@ class StudentMapperTest {
         update.setId(student.getId());
         update.setName("新姓名");
         assertEquals(1, mapper.updateById(update));
+        session.commit();
         student.setName(update.getName());
         assertEquals(student, mapper.selectById(student.getId()), "未传字段保持原值");
     }
@@ -63,17 +69,20 @@ class StudentMapperTest {
     void testDeleteById() {
         Student student = insertStudent();
         assertEquals(1, mapper.deleteById(student.getId()));
+        session.commit();
         assertNull(mapper.selectById(student.getId()));
     }
 
     private Student insertStudent() {
         Student student = newStudent();
         assertEquals(1, mapper.insert(student));
+        session.commit();
         return student;
     }
 
     private Student newStudent() {
         Student student = new Student();
+        testData.track(student);
         student.setStudentNo(UUID.randomUUID().toString().substring(0, 20));
         student.setName("测试学生");
         student.setGender("女");

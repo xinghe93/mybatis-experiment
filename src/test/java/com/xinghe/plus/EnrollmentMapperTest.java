@@ -8,6 +8,7 @@ import com.xinghe.entity.Student;
 import com.xinghe.plus.mapper.CourseMapper;
 import com.xinghe.plus.mapper.EnrollmentMapper;
 import com.xinghe.plus.mapper.StudentMapper;
+import com.xinghe.support.TestDataCleaner;
 import com.xinghe.util.MyBatisPlusUtil;
 import org.apache.ibatis.session.SqlSession;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -25,6 +27,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class EnrollmentMapperTest {
 
+    private static final String SEMESTER = "2026-2027-1";
+
+    private final TestDataCleaner testData = new TestDataCleaner();
     private SqlSession session;
     private EnrollmentMapper mapper;
 
@@ -35,120 +40,121 @@ class EnrollmentMapperTest {
     }
 
     @AfterEach
-    void tearDown() {
-        if (session != null) {
-            try {
-                session.rollback();
-            } finally {
-                session.close();
+    void tearDown() throws SQLException {
+        try (SqlSession currentSession = session) {
+            if (currentSession != null) {
+                currentSession.rollback(); // 仅回滚异常中断时尚未提交的操作。
             }
+        } finally {
+            testData.clean(MyBatisPlusUtil.getSqlSessionFactory());
         }
     }
 
     @Test
     void testInsert() {
-        Enrollment enrollment = newEnrollment();
+        Enrollment enrollment = newEnrollment(insertStudent(), insertCourse(), SEMESTER);
         assertEquals(1, mapper.insert(enrollment));
+        session.commit();
         assertNotNull(enrollment.getId());
+        assertEquals(enrollment, mapper.selectById(enrollment.getId()));
     }
 
     @Test
     void testSelectById() {
-        Enrollment enrollment = insertEnrollment();
+        Enrollment enrollment = insertEnrollment(insertStudent(), insertCourse(), SEMESTER);
         assertEquals(enrollment, mapper.selectById(enrollment.getId()));
     }
 
     @Test
     void testUpdateById() {
-        Enrollment enrollment = insertEnrollment();
+        Enrollment enrollment = insertEnrollment(insertStudent(), insertCourse(), SEMESTER);
         Enrollment update = new Enrollment();
         update.setId(enrollment.getId());
         update.setScore(new BigDecimal("0.00"));
         assertEquals(1, mapper.updateById(update));
+        session.commit();
         enrollment.setScore(update.getScore());
         assertEquals(enrollment, mapper.selectById(enrollment.getId()), "零分有效，未传字段保持原值");
     }
 
     @Test
     void testDeleteById() {
-        Enrollment enrollment = insertEnrollment();
+        Enrollment enrollment = insertEnrollment(insertStudent(), insertCourse(), SEMESTER);
         assertEquals(1, mapper.deleteById(enrollment.getId()));
+        session.commit();
         assertNull(mapper.selectById(enrollment.getId()));
     }
 
     @Test
     void testSelectPage() {
-        Enrollment first = insertEnrollment();
-        Integer studentId = first.getStudentId();
-        String semester = first.getSemester();
-        List<Enrollment> firstPageRecords = new ArrayList<>();
-        firstPageRecords.add(first);
-        for (int i = 0; i < 4; i++) {
-            Enrollment enrollment = newEnrollment();
-            enrollment.setStudentId(studentId);
-            assertEquals(1, mapper.insert(enrollment));
-            firstPageRecords.add(enrollment);
+        Integer studentId = insertStudent();
+        List<Enrollment> records = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            records.add(insertEnrollment(studentId, insertCourse(), SEMESTER));
         }
-        Enrollment last = newEnrollment();
-        last.setStudentId(studentId);
-        assertEquals(1, mapper.insert(last));
-
-        Enrollment otherSemester = newEnrollment();
-        otherSemester.setStudentId(studentId);
-        otherSemester.setSemester("2026-2027-2");
-        assertEquals(1, mapper.insert(otherSemester));
-        insertEnrollment(); // 同学期的另一名学生不应进入分页结果。
+        insertEnrollment(studentId, insertCourse(), "2026-2027-2");
+        insertEnrollment(insertStudent(), insertCourse(), SEMESTER);
 
         LambdaQueryWrapper<Enrollment> query = new LambdaQueryWrapper<Enrollment>()
-                .eq(studentId != null, Enrollment::getStudentId, studentId)
-                .eq(semester != null && !semester.isBlank(), Enrollment::getSemester, semester)
+                .eq(Enrollment::getStudentId, studentId)
+                .eq(Enrollment::getSemester, SEMESTER)
                 .orderByAsc(Enrollment::getId);
         Page<Enrollment> firstPage = mapper.selectPage(new Page<>(1, 5), query);
-        assertEquals(firstPageRecords, firstPage.getRecords());
+        assertEquals(records.subList(0, 5), firstPage.getRecords());
         assertEquals(6, firstPage.getTotal());
         assertEquals(1, firstPage.getCurrent());
         assertEquals(5, firstPage.getSize());
         assertEquals(2, firstPage.getPages());
 
         Page<Enrollment> secondPage = mapper.selectPage(new Page<>(2, 5), query);
-        assertEquals(List.of(last), secondPage.getRecords());
+        assertEquals(records.subList(5, 6), secondPage.getRecords());
         assertEquals(6, secondPage.getTotal());
         assertEquals(2, secondPage.getCurrent());
         assertEquals(5, secondPage.getSize());
         assertEquals(2, secondPage.getPages());
     }
 
-    private Enrollment insertEnrollment() {
-        Enrollment enrollment = newEnrollment();
+    private Enrollment insertEnrollment(Integer studentId, Integer courseId, String semester) {
+        Enrollment enrollment = newEnrollment(studentId, courseId, semester);
         assertEquals(1, mapper.insert(enrollment));
+        session.commit();
         return enrollment;
     }
 
-    // 先创建学生和课程，满足外键；临时父表数据也一起回滚。
-    private Enrollment newEnrollment() {
-        String number = UUID.randomUUID().toString().substring(0, 20);
+    // 只构造对象，不执行数据库操作。
+    private Enrollment newEnrollment(Integer studentId, Integer courseId, String semester) {
+        Enrollment enrollment = new Enrollment();
+        enrollment.setStudentId(studentId);
+        enrollment.setCourseId(courseId);
+        enrollment.setSemester(semester);
+        enrollment.setSelectedAt(LocalDateTime.of(2026, 9, 2, 9, 0));
+        return enrollment;
+    }
+
+    private Integer insertStudent() {
         Student student = new Student();
-        student.setStudentNo(number);
+        testData.track(student);
+        student.setStudentNo(UUID.randomUUID().toString().substring(0, 20));
         student.setName("测试学生");
         student.setGender("男");
         student.setMajor("软件工程");
         student.setGrade((short) 2026);
         student.setEnrollmentDate(LocalDate.of(2026, 9, 1));
         assertEquals(1, session.getMapper(StudentMapper.class).insert(student));
+        session.commit();
+        return student.getId();
+    }
 
+    private Integer insertCourse() {
         Course course = new Course();
-        course.setCourseNo(number);
+        testData.track(course);
+        course.setCourseNo(UUID.randomUUID().toString().substring(0, 20));
         course.setName("测试课程");
         course.setCredit(new BigDecimal("2.0"));
         course.setHours((short) 32);
         course.setTeacher("测试教师");
         assertEquals(1, session.getMapper(CourseMapper.class).insert(course));
-
-        Enrollment enrollment = new Enrollment();
-        enrollment.setStudentId(student.getId());
-        enrollment.setCourseId(course.getId());
-        enrollment.setSemester("2026-2027-1");
-        enrollment.setSelectedAt(LocalDateTime.of(2026, 9, 2, 9, 10, 20));
-        return enrollment;
+        session.commit();
+        return course.getId();
     }
 }

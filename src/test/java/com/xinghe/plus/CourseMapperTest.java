@@ -3,6 +3,7 @@ package com.xinghe.plus;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xinghe.entity.Course;
 import com.xinghe.plus.mapper.CourseMapper;
+import com.xinghe.support.TestDataCleaner;
 import com.xinghe.util.MyBatisPlusUtil;
 import org.apache.ibatis.session.SqlSession;
 import org.junit.jupiter.api.AfterEach;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CourseMapperTest {
 
+    private final TestDataCleaner testData = new TestDataCleaner();
     private SqlSession session;
     private CourseMapper mapper;
 
@@ -27,13 +30,13 @@ class CourseMapperTest {
     }
 
     @AfterEach
-    void tearDown() {
-        if (session != null) {
-            try {
-                session.rollback();
-            } finally {
-                session.close();
+    void tearDown() throws SQLException {
+        try (SqlSession currentSession = session) {
+            if (currentSession != null) {
+                currentSession.rollback(); // 仅回滚异常中断时尚未提交的操作。
             }
+        } finally {
+            testData.clean(MyBatisPlusUtil.getSqlSessionFactory());
         }
     }
 
@@ -41,7 +44,9 @@ class CourseMapperTest {
     void testInsert() {
         Course course = newCourse("数据库", "李老师", "2.0");
         assertEquals(1, mapper.insert(course));
+        session.commit();
         assertNotNull(course.getId());
+        assertEquals(course, mapper.selectById(course.getId()));
     }
 
     @Test
@@ -57,6 +62,7 @@ class CourseMapperTest {
         update.setId(course.getId());
         update.setTeacher("王老师");
         assertEquals(1, mapper.updateById(update));
+        session.commit();
         course.setTeacher(update.getTeacher());
         assertEquals(course, mapper.selectById(course.getId()), "未传字段保持原值");
     }
@@ -65,6 +71,7 @@ class CourseMapperTest {
     void testDeleteById() {
         Course course = insertCourse("数据库", "李老师", "2.0");
         assertEquals(1, mapper.deleteById(course.getId()));
+        session.commit();
         assertNull(mapper.selectById(course.getId()));
     }
 
@@ -100,11 +107,13 @@ class CourseMapperTest {
     private Course insertCourse(String name, String teacher, String credit) {
         Course course = newCourse(name, teacher, credit);
         assertEquals(1, mapper.insert(course));
+        session.commit();
         return course;
     }
 
     private Course newCourse(String name, String teacher, String credit) {
         Course course = new Course();
+        testData.track(course);
         course.setCourseNo(UUID.randomUUID().toString().substring(0, 20));
         course.setName(name);
         course.setCredit(new BigDecimal(credit));

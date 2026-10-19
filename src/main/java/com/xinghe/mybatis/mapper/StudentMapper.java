@@ -29,4 +29,9 @@ public interface StudentMapper {
      */
     List<Student> selectByCondition(@Param("condition") Student student);
 
+    /**
+     * 与 selectByCondition 条件相同，使用 trim 演示 where 标签的等效写法。
+     */
+    List<Student> selectByConditionWithTrim(@Param("condition") Student student);
+
 }

@@ -5,6 +5,36 @@
 
 <mapper namespace="com.xinghe.mybatis.mapper.StudentMapper">
 
+    <!-- 显式映射全部字段，不依赖全局驼峰映射。 -->
+    <resultMap id="studentMap" type="Student" autoMapping="false">
+        <id property="id" column="id"/>
+        <result property="studentNo" column="student_no"/>
+        <result property="name" column="name"/>
+        <result property="gender" column="gender"/>
+        <result property="major" column="major"/>
+        <result property="grade" column="grade"/>
+        <result property="enrollmentDate" column="enrollment_date"/>
+    </resultMap>
+
+    <sql id="studentColumns">
+        id, student_no, name, gender, major, grade, enrollment_date
+    </sql>
+
+    <!-- 两种条件查询共用谓词，便于对照 where 与 trim 的等效行为。 -->
+    <sql id="studentConditions">
+        <bind name="name" value="condition != null and condition.name != null ? condition.name.trim() : null"/>
+        <bind name="major" value="condition != null and condition.major != null ? condition.major.trim() : null"/>
+        <if test="name != null and name != ''">
+            AND name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="major != null and major != ''">
+            AND major LIKE CONCAT('%', #{major}, '%')
+        </if>
+        <if test="condition != null and condition.grade != null">
+            AND grade = #{condition.grade}
+        </if>
+    </sql>
+
     <insert id="insert"
             parameterType="Student"
             useGeneratedKeys="true"
@@ -13,8 +43,8 @@
         VALUES (#{studentNo}, #{name}, #{gender}, #{major}, #{grade}, #{enrollmentDate})
     </insert>
 
-    <select id="selectById" resultType="Student">
-        SELECT id, student_no, name, gender, major, grade, enrollment_date
+    <select id="selectById" resultMap="studentMap">
+        SELECT <include refid="studentColumns"/>
         FROM student
         WHERE id = #{id}
     </select>
@@ -49,22 +79,22 @@
     </delete>
 
     <!-- <where>/<if> 省略空条件，并用 AND 组合；<bind> 去除查询值首尾空格。 -->
-    <select id="selectByCondition" resultType="Student">
-        <bind name="name" value="condition != null and condition.name != null ? condition.name.trim() : null"/>
-        <bind name="major" value="condition != null and condition.major != null ? condition.major.trim() : null"/>
-        SELECT id, student_no, name, gender, major, grade, enrollment_date
+    <select id="selectByCondition" resultMap="studentMap">
+        SELECT <include refid="studentColumns"/>
         FROM student
         <where>
-            <if test="name != null and name != ''">
-                AND name LIKE CONCAT('%', #{name}, '%')
-            </if>
-            <if test="major != null and major != ''">
-                AND major LIKE CONCAT('%', #{major}, '%')
-            </if>
-            <if test="condition != null and condition.grade != null">
-                AND grade = #{condition.grade}
-            </if>
+            <include refid="studentConditions"/>
         </where>
+        ORDER BY id
+    </select>
+
+    <!-- 非空时补 WHERE 并去掉开头的 AND/OR；空条件时不生成 WHERE。 -->
+    <select id="selectByConditionWithTrim" resultMap="studentMap">
+        SELECT <include refid="studentColumns"/>
+        FROM student
+        <trim prefix="WHERE" prefixOverrides="AND |OR ">
+            <include refid="studentConditions"/>
+        </trim>
         ORDER BY id
     </select>
 
